@@ -252,7 +252,7 @@
     return overlay;
   }
 
-  function drawOverlay(canvasEl, tiles, paths, stageSize, grid) {
+  function drawOverlay(canvasEl, tiles, paths, stageSize, grid, scaleFix) {
     var gameCanvas = document.getElementById('canvas');
     if (!gameCanvas) return;
     var rect = gameCanvas.getBoundingClientRect();
@@ -270,8 +270,8 @@
     ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
 
-    var scaleX = rect.width / (stageSize.width || rect.width);
-    var scaleY = rect.height / (stageSize.height || rect.height);
+    var scaleX = scaleFix && scaleFix.x ? scaleFix.x : rect.width / (stageSize.width || rect.width);
+    var scaleY = scaleFix && scaleFix.y ? scaleFix.y : rect.height / (stageSize.height || rect.height);
 
     var byId = new Map();
     for (var i = 0; i < tiles.length; i++) {
@@ -308,10 +308,10 @@
       var first = byId.get(path.ids[0]);
       var last = byId.get(path.ids[path.ids.length - 1]);
       if (!first || !last) continue;
-      var x1 = (first.gx != null ? first.gx : first.x) * scaleX;
-      var y1 = (first.gy != null ? first.gy : first.y) * scaleY;
-      var x2 = (last.gx != null ? last.gx : last.x) * scaleX;
-      var y2 = (last.gy != null ? last.gy : last.y) * scaleY;
+      var x1 = first.x * scaleX;
+      var y1 = first.y * scaleY;
+      var x2 = last.x * scaleX;
+      var y2 = last.y * scaleY;
 
       ctx.save();
       ctx.strokeStyle = color;
@@ -330,8 +330,8 @@
       for (var m = 0; m < path.ids.length; m++) {
         var mt = byId.get(path.ids[m]);
         if (!mt) continue;
-        var mx = (mt.gx != null ? mt.gx : mt.x) * scaleX;
-        var my = (mt.gy != null ? mt.gy : mt.y) * scaleY;
+        var mx = mt.x * scaleX;
+        var my = mt.y * scaleY;
         ctx.beginPath();
         ctx.arc(mx, my, 5, 0, Math.PI * 2);
         ctx.fill();
@@ -353,12 +353,19 @@
       if (!overlayEnabled) return;
       var tiles = lastPayload.tiles;
       var stageSize = lastPayload.stageSize || { width: 720, height: 470 };
+      var scaleFix = null;
+      if (lastPayload.stageScaleX && window.devicePixelRatio) {
+        scaleFix = {
+          x: lastPayload.stageScaleX / window.devicePixelRatio,
+          y: lastPayload.stageScaleY / window.devicePixelRatio
+        };
+      }
       var gridInput = tiles.map(function (t) {
         return {
           id: t.id,
           nu: t.nu,
-          x: (t.gx != null ? t.gx : t.x),
-          y: (t.gy != null ? t.gy : t.y),
+          x: t.x,
+          y: t.y,
           gx: t.gx,
           gy: t.gy,
           dropped: t.dropped
@@ -378,7 +385,7 @@
         return assigned;
       });
       var paths = pickPaths(findPathsSum10(gridTiles));
-      drawOverlay(document.getElementById('canvas'), gridTiles, paths, stageSize, grid);
+      drawOverlay(document.getElementById('canvas'), gridTiles, paths, stageSize, grid, scaleFix);
     });
   }
 

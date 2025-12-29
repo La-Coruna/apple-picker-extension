@@ -159,7 +159,15 @@
         dropped: !!t.flDroped
       });
     }
-    return { tiles: out, stageSize: stageSize, ts: Date.now() };
+    var stageScaleX = stage && typeof stage.scaleX === 'number' ? stage.scaleX : null;
+    var stageScaleY = stage && typeof stage.scaleY === 'number' ? stage.scaleY : null;
+    return {
+      tiles: out,
+      stageSize: stageSize,
+      stageScaleX: stageScaleX,
+      stageScaleY: stageScaleY,
+      ts: Date.now()
+    };
   }
 
   function post(data) {

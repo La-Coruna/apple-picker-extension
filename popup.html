@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apple Picker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <a
+        class="game-link"
+        href="https://www.gamesaien.com/game/fruit_box_a/"
+        target="_blank"
+        rel="noreferrer"
+        data-i18n="gameLink"
+      ></a>
+      <h1 data-i18n="popupTitle"></h1>
+      <form id="strategy-form" class="list">
+        <label class="item">
+          <span class="swatch swatch-count"></span>
+          <input type="checkbox" name="strategy" value="max_count_any" />
+          <span data-i18n="strategyMaxCount"></span>
+        </label>
+        <label class="item">
+          <span class="swatch swatch-value"></span>
+          <input type="checkbox" name="strategy" value="max_value_first" />
+          <span data-i18n="strategyMaxValue"></span>
+        </label>
+        <label class="item">
+          <span class="swatch swatch-lookahead"></span>
+          <input type="checkbox" name="strategy" value="lookahead_1" />
+          <span data-i18n="strategyLookahead"></span>
+        </label>
+      </form>
+      <div id="status" class="status"></div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

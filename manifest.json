@@ -1,14 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Apple Picker",
-  "version": "0.1.0",
-  "description": "Helps you play the Apple Picker game by finding and highlighting valid sum-10 rectangles or lines using CreateJS tile state.",
+  "name": "__MSG_extName__",
+  "version": "0.2.0",
+  "description": "__MSG_extDescription__",
   "icons": {
     "16": "favicon.png",
     "32": "favicon.png",
     "48": "favicon.png",
     "128": "favicon.png"
   },
+  "action": {
+    "default_title": "__MSG_extName__",
+    "default_popup": "popup.html"
+  },
+  "default_locale": "en",
+  "permissions": [
+    "storage"
+  ],
   "content_scripts": [
     {
       "matches": [

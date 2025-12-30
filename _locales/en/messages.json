@@ -1,0 +1,26 @@
+{
+  "extName": {
+    "message": "Apple Picker"
+  },
+  "extDescription": {
+    "message": "Helps you play the 'Apple Game' by finding and highlighting valid sum-10 rectangles using CreateJS tile state."
+  },
+  "popupTitle": {
+    "message": "Strategy"
+  },
+  "strategyMaxCount": {
+    "message": "Max tiles removed (rect/line)"
+  },
+  "strategyMaxValue": {
+    "message": "Max value first (9→1), fewer tiles win"
+  },
+  "strategyLookahead": {
+    "message": "Lookahead depth-2 (count + future options)"
+  },
+  "storageUnavailable": {
+    "message": "Storage not available."
+  },
+  "gameLink": {
+    "message": "Open game site"
+  }
+}

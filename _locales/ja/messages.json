@@ -1,0 +1,26 @@
+{
+  "extName": {
+    "message": "Apple Picker - フルーツボックスアシスタント"
+  },
+  "extDescription": {
+    "message": "合計10になる有効な長方形を見つけてハイライトし、「フルーツボックス」を遊ぶのを手伝います。"
+  },
+  "popupTitle": {
+    "message": "戦略"
+  },
+  "strategyMaxCount": {
+    "message": "除去タイル数最大（長方形/直線）"
+  },
+  "strategyMaxValue": {
+    "message": "最大値優先（9??）、少ないタイルほど有利"
+  },
+  "strategyLookahead": {
+    "message": "2手先読み（現在+将来の選択肢）"
+  },
+  "storageUnavailable": {
+    "message": "ストレージを利用できません。"
+  },
+  "gameLink": {
+    "message": "フルーツボックスを開く"
+  }
+}

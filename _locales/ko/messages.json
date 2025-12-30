@@ -1,0 +1,26 @@
+{
+  "extName": {
+    "message": "Apple Picker - 사과 게임 도우미"
+  },
+  "extDescription": {
+    "message": "사과 게임 도우미 입니다. 배치된 사과들을 분석해 합이 10이 되는 직사각형을 찾아 표시합니다."
+  },
+  "popupTitle": {
+    "message": "전략"
+  },
+  "strategyMaxCount": {
+    "message": "가장 많은 타일 제거 (직사각형/직선)"
+  },
+  "strategyMaxValue": {
+    "message": "큰 숫자 우선 (9→1), 타일 수가 적은 조합"
+  },
+  "strategyLookahead": {
+    "message": "2수 앞보기 (현재 + 미래 선택지)"
+  },
+  "storageUnavailable": {
+    "message": "저장소를 사용할 수 없습니다."
+  },
+  "gameLink": {
+    "message": "게임 사이트 열기"
+  }
+}

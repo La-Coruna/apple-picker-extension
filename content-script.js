@@ -4,8 +4,29 @@
 
   var INJECT_FLAG = 'data-apple-picker-injected';
   var OVERLAY_ID = 'apple-picker-overlay';
-  var MAX_PATHS = 10;
+  var MAX_PATHS = 50;
   var MAX_PATH_LEN = 30;
+  var STRATEGY_KEY = 'applePickerStrategy';
+  var STRATEGIES = {
+    MAX_COUNT_ANY: 'max_count_any',
+    MAX_VALUE_FIRST: 'max_value_first',
+    LOOKAHEAD_1: 'lookahead_1'
+  };
+  var currentStrategies = [];
+  var storageReady = false;
+  var STRATEGY_COLORS = {};
+  STRATEGY_COLORS[STRATEGIES.MAX_COUNT_ANY] = '#00C853';
+  STRATEGY_COLORS[STRATEGIES.MAX_VALUE_FIRST] = '#2962FF';
+  STRATEGY_COLORS[STRATEGIES.LOOKAHEAD_1] = '#FF6D00';
+  var STRATEGY_FILLS = {};
+  STRATEGY_FILLS[STRATEGIES.MAX_COUNT_ANY] = 'rgba(0, 200, 83, 0.12)';
+  STRATEGY_FILLS[STRATEGIES.MAX_VALUE_FIRST] = 'rgba(41, 98, 255, 0.12)';
+  STRATEGY_FILLS[STRATEGIES.LOOKAHEAD_1] = 'rgba(255, 109, 0, 0.12)';
+  var STRATEGY_VALUES = Object.keys(STRATEGIES).map(function (key) { return STRATEGIES[key]; });
+
+  function isValidStrategy(value) {
+    return STRATEGY_VALUES.indexOf(value) >= 0;
+  }
 
   function inject() {
     var root = document.documentElement;
@@ -223,21 +244,174 @@
     return results;
   }
 
-  function pickPaths(paths) {
-    if (!paths.length) return paths;
-    var rects = paths.filter(function (p) { return p.type === 'rect'; });
-    if (rects.length) {
-      rects.sort(function (a, b) {
-        if (a.count !== b.count) return b.count - a.count;
-        var areaA = (a.r2 - a.r1 + 1) * (a.c2 - a.c1 + 1);
-        var areaB = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
-        return areaA - areaB;
-      });
-      return [rects[0]];
+  function getPathCount(path) {
+    return path.type === 'rect' ? path.count : path.ids.length;
+  }
+
+  function getPathArea(path) {
+    if (path.type === 'rect') {
+      return (path.r2 - path.r1 + 1) * (path.c2 - path.c1 + 1);
     }
-    var lines = paths.filter(function (p) { return p.type === 'line'; });
-    lines.sort(function (a, b) { return b.ids.length - a.ids.length; });
-    return lines.length ? [lines[0]] : [];
+    return path.ids.length;
+  }
+
+  function getPathMaxValue(path, tiles, byId) {
+    var max = -Infinity;
+    if (path.type === 'rect') {
+      for (var i = 0; i < tiles.length; i++) {
+        var t = tiles[i];
+        if (t.dropped) continue;
+        if (t.row < path.r1 || t.row > path.r2) continue;
+        if (t.col < path.c1 || t.col > path.c2) continue;
+        if (t.nu > max) max = t.nu;
+      }
+      return max;
+    }
+    for (var j = 0; j < path.ids.length; j++) {
+      var id = path.ids[j];
+      var mt = byId.get(id);
+      if (mt && mt.nu > max) max = mt.nu;
+    }
+    return max;
+  }
+
+  function applyPathRemoval(path, tiles) {
+    if (path.type === 'rect') {
+      for (var i = 0; i < tiles.length; i++) {
+        var t = tiles[i];
+        if (t.dropped) continue;
+        if (t.row < path.r1 || t.row > path.r2) continue;
+        if (t.col < path.c1 || t.col > path.c2) continue;
+        t.dropped = true;
+      }
+      return;
+    }
+    for (var j = 0; j < path.ids.length; j++) {
+      var id = path.ids[j];
+      for (var k = 0; k < tiles.length; k++) {
+        if (tiles[k].id === id) {
+          tiles[k].dropped = true;
+          break;
+        }
+      }
+    }
+  }
+
+  function cloneTiles(tiles) {
+    var out = [];
+    for (var i = 0; i < tiles.length; i++) {
+      var t = tiles[i];
+      out.push({
+        id: t.id,
+        nu: t.nu,
+        x: t.x,
+        y: t.y,
+        gx: t.gx,
+        gy: t.gy,
+        row: t.row,
+        col: t.col,
+        dropped: t.dropped
+      });
+    }
+    return out;
+  }
+
+  function pathKey(path) {
+    if (!path) return '';
+    if (path.type === 'rect') {
+      return 'rect:' + path.r1 + ',' + path.c1 + ',' + path.r2 + ',' + path.c2;
+    }
+    return 'line:' + path.ids.join(',');
+  }
+
+  function pickPath(paths, tiles, strategy, excludeKeys) {
+    if (!paths.length) return null;
+    var excluded = excludeKeys || new Set();
+    if (strategy === STRATEGIES.MAX_COUNT_ANY) {
+      var scored = paths.map(function (p) {
+        return { path: p, count: getPathCount(p), area: getPathArea(p) };
+      });
+      scored.sort(function (a, b) {
+        if (a.count !== b.count) return b.count - a.count;
+        return a.area - b.area;
+      });
+      for (var s = 0; s < scored.length; s++) {
+        var key = pathKey(scored[s].path);
+        if (!excluded.has(key)) return scored[s].path;
+      }
+      return null;
+    }
+    if (strategy === STRATEGIES.MAX_VALUE_FIRST) {
+      var byId = new Map();
+      for (var i = 0; i < tiles.length; i++) {
+        byId.set(tiles[i].id, tiles[i]);
+      }
+      var scoredValue = paths.map(function (p) {
+        return {
+          path: p,
+          maxValue: getPathMaxValue(p, tiles, byId),
+          count: getPathCount(p),
+          area: getPathArea(p)
+        };
+      });
+      scoredValue.sort(function (a, b) {
+        if (a.maxValue !== b.maxValue) return b.maxValue - a.maxValue;
+        if (a.count !== b.count) return a.count - b.count;
+        return a.area - b.area;
+      });
+      for (var sv = 0; sv < scoredValue.length; sv++) {
+        var keyValue = pathKey(scoredValue[sv].path);
+        if (!excluded.has(keyValue)) return scoredValue[sv].path;
+      }
+      return null;
+    }
+    if (strategy === STRATEGIES.LOOKAHEAD_1) {
+      var MAX_BRANCH = 12;
+      var DEPTH = 2;
+
+      function scorePaths(nextPaths, nextTiles, depth) {
+        if (!nextPaths.length || depth <= 0) return 0;
+        nextPaths.sort(function (a, b) { return getPathCount(b) - getPathCount(a); });
+        nextPaths = nextPaths.slice(0, MAX_BRANCH);
+        var best = 0;
+        for (var i = 0; i < nextPaths.length; i++) {
+          var p = nextPaths[i];
+          var localCount = getPathCount(p);
+          var sim = cloneTiles(nextTiles);
+          applyPathRemoval(p, sim);
+          var following = findPathsSum10(sim);
+          var optionScore = Math.min(following.length, 20) * 0.1;
+          var total = localCount + optionScore + scorePaths(following, sim, depth - 1);
+          if (total > best) best = total;
+        }
+        return best;
+      }
+
+      var candidates = paths.slice();
+      candidates.sort(function (a, b) { return getPathCount(b) - getPathCount(a); });
+      candidates = candidates.slice(0, MAX_BRANCH);
+      var scoredLook = [];
+      for (var j = 0; j < candidates.length; j++) {
+        var cur = candidates[j];
+        var curCount = getPathCount(cur);
+        var simTiles = cloneTiles(tiles);
+        applyPathRemoval(cur, simTiles);
+        var nextPaths = findPathsSum10(simTiles);
+        var optionScore = Math.min(nextPaths.length, 20) * 0.2;
+        var score = curCount + optionScore + scorePaths(nextPaths, simTiles, DEPTH - 1);
+        scoredLook.push({ path: cur, score: score, area: getPathArea(cur) });
+      }
+      scoredLook.sort(function (a, b) {
+        if (a.score !== b.score) return b.score - a.score;
+        return a.area - b.area;
+      });
+      for (var sl = 0; sl < scoredLook.length; sl++) {
+        var keyLook = pathKey(scoredLook[sl].path);
+        if (!excluded.has(keyLook)) return scoredLook[sl].path;
+      }
+      return null;
+    }
+    return null;
   }
 
   function ensureOverlay() {
@@ -279,20 +453,41 @@
     }
 
     var max = Math.min(paths.length, MAX_PATHS);
-    var palette = ['#00C853'];
     for (var p = 0; p < max; p++) {
       var path = paths[p];
-      var color = palette[p % palette.length];
+      var color = path.color || '#00C853';
       if (path.type === 'rect') {
         if (!grid || !grid.xCenters.length || !grid.yCenters.length) continue;
-        var xL = grid.xCenters[path.c1] - grid.xSpacing / 2;
-        var xR = grid.xCenters[path.c2] + grid.xSpacing / 2;
-        var yT = grid.yCenters[path.r1] - grid.ySpacing / 2;
-        var yB = grid.yCenters[path.r2] + grid.ySpacing / 2;
+        var minX = null;
+        var maxX = null;
+        var minY = null;
+        var maxY = null;
+        for (var t1 = 0; t1 < tiles.length; t1++) {
+          var tt = tiles[t1];
+          if (tt.dropped) continue;
+          if (tt.row < path.r1 || tt.row > path.r2) continue;
+          if (tt.col < path.c1 || tt.col > path.c2) continue;
+          var cx = grid.xCenters[tt.col];
+          var cy = grid.yCenters[tt.row];
+          if (minX == null || cx < minX) minX = cx;
+          if (maxX == null || cx > maxX) maxX = cx;
+          if (minY == null || cy < minY) minY = cy;
+          if (maxY == null || cy > maxY) maxY = cy;
+        }
+        if (minX == null || minY == null) continue;
+        var xL = minX - grid.xSpacing / 2;
+        var xR = maxX + grid.xSpacing / 2;
+        var yT = minY - grid.ySpacing / 2;
+        var yB = maxY + grid.ySpacing / 2;
         var rx = xL * scaleX;
         var ry = yT * scaleY;
         var rw = (xR - xL) * scaleX;
         var rh = (yB - yT) * scaleY;
+        var inset = path.inset || 0;
+        rx += inset;
+        ry += inset;
+        rw = Math.max(0, rw - inset * 2);
+        rh = Math.max(0, rh - inset * 2);
         ctx.save();
         ctx.strokeStyle = color;
         ctx.lineWidth = 4;
@@ -300,41 +495,37 @@
         ctx.shadowBlur = 8;
         ctx.strokeRect(rx, ry, rw, rh);
         ctx.fillStyle = 'rgba(0, 200, 83, 0.12)';
+        if (path.fill) ctx.fillStyle = path.fill;
         ctx.fillRect(rx, ry, rw, rh);
         ctx.restore();
         continue;
       }
       if (path.type !== 'line' || path.ids.length < 2) continue;
-      var first = byId.get(path.ids[0]);
-      var last = byId.get(path.ids[path.ids.length - 1]);
-      if (!first || !last) continue;
-      var x1 = first.x * scaleX;
-      var y1 = first.y * scaleY;
-      var x2 = last.x * scaleX;
-      var y2 = last.y * scaleY;
-
+      if (!grid || !grid.xCenters.length || !grid.yCenters.length) continue;
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 6;
-      ctx.lineCap = 'round';
+      ctx.lineWidth = 3;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.save();
-      ctx.fillStyle = color;
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = path.fill || 'rgba(0, 200, 83, 0.12)';
       for (var m = 0; m < path.ids.length; m++) {
         var mt = byId.get(path.ids[m]);
         if (!mt) continue;
-        var mx = mt.x * scaleX;
-        var my = mt.y * scaleY;
-        ctx.beginPath();
-        ctx.arc(mx, my, 5, 0, Math.PI * 2);
-        ctx.fill();
+        var lcx = grid.xCenters[mt.col];
+        var lcy = grid.yCenters[mt.row];
+        var lxL = lcx - grid.xSpacing / 2;
+        var lyT = lcy - grid.ySpacing / 2;
+        var lrx = lxL * scaleX;
+        var lry = lyT * scaleY;
+        var lrw = grid.xSpacing * scaleX;
+        var lrh = grid.ySpacing * scaleY;
+        var inset = path.inset || 0;
+        lrx += inset;
+        lry += inset;
+        lrw = Math.max(0, lrw - inset * 2);
+        lrh = Math.max(0, lrh - inset * 2);
+        ctx.strokeRect(lrx, lry, lrw, lrh);
+        ctx.fillRect(lrx, lry, lrw, lrh);
       }
       ctx.restore();
     }
@@ -384,8 +575,27 @@
         });
         return assigned;
       });
-      var paths = pickPaths(findPathsSum10(gridTiles));
-      drawOverlay(document.getElementById('canvas'), gridTiles, paths, stageSize, grid, scaleFix);
+      if (!currentStrategies.length) {
+        clearOverlay();
+        return;
+      }
+      var allPaths = findPathsSum10(gridTiles);
+      var picked = [];
+      var pickedKeys = new Set();
+      for (var i = 0; i < currentStrategies.length; i++) {
+        var strategy = currentStrategies[i];
+        var chosen = pickPath(allPaths, gridTiles, strategy, pickedKeys);
+        if (!chosen) continue;
+        var copy = {};
+        for (var key in chosen) copy[key] = chosen[key];
+        copy.color = STRATEGY_COLORS[strategy] || '#00C853';
+        copy.fill = STRATEGY_FILLS[strategy] || 'rgba(0, 200, 83, 0.12)';
+        copy.inset = 0;
+        // copy.inset = i * 2; // 전략 별 인레이 사각형 크기 다르게.
+        picked.push(copy);
+        pickedKeys.add(pathKey(chosen));
+      }
+      drawOverlay(document.getElementById('canvas'), gridTiles, picked, stageSize, grid, scaleFix);
     });
   }
 
@@ -409,7 +619,38 @@
       overlayEnabled = !overlayEnabled;
       if (!overlayEnabled) clearOverlay();
     }
+    if (event.ctrlKey && !event.shiftKey && event.key === 'S') {
+      currentStrategies = [STRATEGIES.MAX_COUNT_ANY];
+      if (storageReady && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ applePickerStrategy: currentStrategies });
+      }
+    }
   });
+
+  if (chrome && chrome.storage && chrome.storage.local) {
+    storageReady = true;
+    chrome.storage.local.get({ applePickerStrategy: currentStrategies }, function (data) {
+      if (!data) return;
+      if (Array.isArray(data.applePickerStrategy)) {
+        currentStrategies = data.applePickerStrategy.filter(function (s) { return isValidStrategy(s); });
+        if (!currentStrategies.length) clearOverlay();
+      } else if (isValidStrategy(data.applePickerStrategy)) {
+        currentStrategies = [data.applePickerStrategy];
+      }
+    });
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== 'local') return;
+      if (changes.applePickerStrategy) {
+        var nextValue = changes.applePickerStrategy.newValue;
+        if (Array.isArray(nextValue)) {
+          currentStrategies = nextValue.filter(function (s) { return isValidStrategy(s); });
+          if (!currentStrategies.length) clearOverlay();
+        } else if (isValidStrategy(nextValue)) {
+          currentStrategies = [nextValue];
+        }
+      }
+    });
+  }
 
   inject();
 })();
